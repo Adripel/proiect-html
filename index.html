@@ -280,6 +280,7 @@ footer{text-align:center;padding:18px;color:var(--mu);font-size:.7rem;border-top
     <div class="card">
       <div class="ct">👥 Pasul 4 — Verificare și editare</div>
       <div id="sb" class="sb"></div>
+      <div id="premiu-warn" class="al aw" style="display:none"></div>
       <div id="tmpl-warn" class="al aw" style="display:none"></div>
       <div class="tw">
         <table>
@@ -408,21 +409,25 @@ const CAL_FIELDS = [
   {k:'insp_specialitate', lbl:'Inspector Specialit.',  sz:9,  bold:false},
 ];
 
-// Default positions — fraction (0..1) from page top-left
-// x=0.5 means centered; draw() uses centering logic for x near 0.5
+// Default positions tuned for the TERRA 2026 templates (landscape A4).
+// Active fields drawn over the template's blank lines: name, clasa, scoala, localitate, profesor,
+// insp_general, insp_specialitate. Inactive fields (concurs/premiu/an_scolar/data_acordarii/
+// localitate_org) are pre-printed on the template and skipped in buildPDF below.
+// Coordinates are fractions of the page (0..1) from top-left. Fine-tune via the in-app calibration UI.
 const DEFAULT_POS = {
+  name:             {x:0.45, y:0.50, align:'left'  },  // after "Se acordă elevei/elevului ___"
+  clasa:            {x:0.86, y:0.50, align:'left'  },  // after "clasa a __-a"
+  scoala:           {x:0.50, y:0.56, align:'center'},  // line "de la unitatea școlară ___"
+  localitate:       {x:0.50, y:0.62, align:'center'},  // line "localitatea ___, județul ___"
+  profesor:         {x:0.62, y:0.62, align:'center'},  // line "coordonat de profesor ___" (centered on the blank, not on the page)
+  insp_general:     {x:0.30, y:0.84, align:'center'},  // signature, left half
+  insp_specialitate:{x:0.78, y:0.84, align:'center'},  // signature, right half
+  // Kept for backward compat with the calibration UI but NOT drawn (see drawField calls below)
   concurs:          {x:0.5,  y:0.27, align:'center'},
-  name:             {x:0.5,  y:0.38, align:'center'},
   premiu:           {x:0.5,  y:0.65, align:'center'},
-  clasa:            {x:0.5,  y:0.44, align:'center'},
-  scoala:           {x:0.5,  y:0.49, align:'center'},
-  localitate:       {x:0.5,  y:0.54, align:'center'},
-  profesor:         {x:0.5,  y:0.59, align:'center'},
   an_scolar:        {x:0.5,  y:0.72, align:'center'},
   data_acordarii:   {x:0.5,  y:0.76, align:'center'},
   localitate_org:   {x:0.5,  y:0.80, align:'center'},
-  insp_general:     {x:0.08, y:0.87, align:'left'},
-  insp_specialitate:{x:0.92, y:0.87, align:'right'},
 };
 
 const PNORM = {
@@ -514,8 +519,6 @@ function checkReady() {
 
 // ═══════════════════════════════════
 // PDF.js — table extraction
-// FIX #6: compare against last item in group, not first
-// FIX #7: keep single-item lines (they may be real table cells)
 // ═══════════════════════════════════
 async function parseTabel() {
   const btn = document.getElementById('btn-parse');
@@ -543,55 +546,51 @@ async function parseTabel() {
 
 async function extractTable(buffer) {
   const pdf = await pdfjsLib.getDocument({data: buffer.slice(0), verbosity:0}).promise;
-  const allItems = [];
+  const ROW_TOL = 5;
+  const allLineGroups = [];
 
+  // Group rows per-page so items at the same Y on different pages don't merge
   for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const vp   = page.getViewport({scale:1});
+    const page    = await pdf.getPage(p);
+    const vp      = page.getViewport({scale:1});
     const content = await page.getTextContent({includeMarkedContent:false});
+
+    const items = [];
     for (const item of content.items) {
       if (!item.str || !item.str.trim()) continue;
-      // Flip Y: PDF origin is bottom-left, we want top-left
       const y = vp.height - item.transform[5];
-      allItems.push({x: item.transform[4], y, text: item.str.trim()});
+      items.push({x: item.transform[4], y, text: item.str.trim()});
     }
-  }
-  if (!allItems.length) return {cols:[], rows:[]};
+    if (!items.length) continue;
 
-  // Sort all items top-to-bottom
-  allItems.sort((a,b) => a.y - b.y);
-
-  // FIX #6: group by proximity to LAST item in current group
-  const ROW_TOL = 5;
-  const lineGroups = [];
-  let cur = [allItems[0]];
-  for (let i = 1; i < allItems.length; i++) {
-    const lastY = cur[cur.length - 1].y;  // compare to LAST, not first
-    if (Math.abs(allItems[i].y - lastY) <= ROW_TOL) {
-      cur.push(allItems[i]);
-    } else {
-      lineGroups.push(cur);
-      cur = [allItems[i]];
+    items.sort((a,b) => a.y - b.y);
+    let cur = [items[0]];
+    for (let i = 1; i < items.length; i++) {
+      const lastY = cur[cur.length - 1].y;
+      if (Math.abs(items[i].y - lastY) <= ROW_TOL) {
+        cur.push(items[i]);
+      } else {
+        allLineGroups.push(cur);
+        cur = [items[i]];
+      }
     }
+    allLineGroups.push(cur);
   }
-  lineGroups.push(cur);
 
-  // FIX #7: keep ALL lines (including single-cell ones); filter later by content
-  // Sort each line left-to-right
-  lineGroups.forEach(line => line.sort((a,b) => a.x - b.x));
+  if (!allLineGroups.length) return {cols:[], rows:[]};
 
-  // Find reference line (most cells = likely header or densest data row)
-  const refLine = lineGroups.reduce((a,b) => a.length >= b.length ? a : b);
+  allLineGroups.forEach(line => line.sort((a,b) => a.x - b.x));
+
+  const refLine = allLineGroups.reduce((a,b) => a.length >= b.length ? a : b);
   const colXs   = refLine.map(item => item.x);
 
-  // Assign each item to nearest column
   function nearestCol(x) {
     let best = 0, bestDist = Infinity;
     colXs.forEach((cx,i) => { const d=Math.abs(x-cx); if(d<bestDist){bestDist=d;best=i;} });
     return best;
   }
 
-  const grid = lineGroups.map(line => {
+  const grid = allLineGroups.map(line => {
     const row = new Array(colXs.length).fill('');
     line.forEach(item => {
       const c = nearestCol(item.x);
@@ -600,9 +599,40 @@ async function extractTable(buffer) {
     return row;
   });
 
-  // Treat first non-empty row as header
-  const cols = grid[0];
-  const rows = grid.slice(1).filter(r => r.some(c => c.trim()));
+  const HEADER_RE = /nume|elev|clas[aă]|premi|loc(ul)?$|profesor|cadru|institu|[șs]coal|distinc|jude|local/i;
+  let headerIdx = grid.findIndex(line => line.some(c => HEADER_RE.test(c)));
+  if (headerIdx === -1) headerIdx = 0;
+  // Merge subsequent header-continuation lines (multi-line wrapped headers) into the header row.
+  // A continuation is a line where ALL non-empty cells look like header text (match HEADER_RE).
+  // This prevents merging student rows that happen to contain header-like words (e.g., "Școala…").
+  const header = [...grid[headerIdx]];
+  let dataStart = headerIdx + 1;
+  while (dataStart < grid.length) {
+    const filled = grid[dataStart].filter(c => c.trim());
+    const allHeaderLike = filled.length > 0 && filled.every(c => HEADER_RE.test(c));
+    if (!allHeaderLike) break;
+    grid[dataStart].forEach((c, i) => {
+      if (c.trim()) header[i] = (header[i] ? header[i] + ' ' : '') + c.trim();
+    });
+    dataStart++;
+  }
+  const cols = header;
+  const rawRows = grid.slice(dataStart).filter(r => r.some(c => c.trim()));
+
+  // Merge wrap-rows (continuation lines from text-wrapping in long cells) into the previous data row.
+  // Heuristic: a row with no value in column 0 (typically the row-number column) and with only a
+  // few non-empty cells is a wrap fragment of the previous row, not a new student.
+  const rows = [];
+  for (const r of rawRows) {
+    const firstEmpty  = !r[0] || !r[0].trim();
+    const filledCount = r.filter(c => c.trim()).length;
+    if (firstEmpty && filledCount > 0 && filledCount <= 3 && rows.length > 0) {
+      const prev = rows[rows.length - 1];
+      r.forEach((c, i) => { if (c.trim()) prev[i] = (prev[i] ? prev[i] + ' ' : '') + c.trim(); });
+    } else {
+      rows.push([...r]);
+    }
+  }
   return {cols, rows};
 }
 
@@ -639,12 +669,22 @@ const GUESS_PATS = {
   clasa:       /clas[aă]/i,
   scoala:      /[șs]coal[aă]|unit|institu/i,
   localitate:  /local|jude[tț]|ora[șs]|munic/i,
-  profesor:    /prof|cadru|[îi]nv[aăâ][țt]/i,
-  premiu:      /premiu|loc|distinc|men[tț]/i,
+  profesor:    /\bprof|cadru.?didactic|[îi]nv[aăâ][țt][aă]tor/i,
+  premiu:      /premi[ui]?|loc|distinc|men[tț]/i,
 };
 function guessCol(f, cols) {
   const p = GUESS_PATS[f]; if(!p) return -1;
-  for (let i=0; i<cols.length; i++) if(p.test(cols[i]||'')) return i;
+  const sample = S.rows[0] || [];
+  for (let i=0; i<cols.length; i++) {
+    if (!p.test(cols[i]||'')) continue;
+    // If the matched header column has no data in the first data row but its left neighbour
+    // does, the header was split across two cells (e.g. "Nume" + "profesor") — pick the
+    // neighbour where the data actually lives.
+    const hasOwnData = sample[i] && sample[i].trim();
+    const hasLeftData = i > 0 && sample[i-1] && sample[i-1].trim();
+    if (!hasOwnData && hasLeftData) return i - 1;
+    return i;
+  }
   return -1;
 }
 
@@ -661,27 +701,46 @@ function applyMap() {
   go(3);
 }
 
-// FIX #12: normPremiu always falls back to 'P', never returns unknown value
 function normPremiu(raw) {
   const k = (raw||'').trim().toLowerCase();
-  return PNORM[k] || 'P';
+  return PNORM[k] || null;
 }
 function gCell(row,idx) { return idx>=0?(row[idx]||'').trim():''; }
 
 function buildStudents() {
   const m = S.mapping;
   S.students = S.rows
-    .map((r,i) => ({
-      id: i,
-      name:       gCell(r, m.name),
-      clasa:      gCell(r, m.clasa),
-      scoala:     gCell(r, m.scoala),
-      localitate: gCell(r, m.localitate),
-      profesor:   gCell(r, m.profesor),
-      premiu:     normPremiu(gCell(r, m.premiu)),
-    }))
+    .map((r,i) => {
+      const rawPremiu = gCell(r, m.premiu);
+      const norm      = normPremiu(rawPremiu);
+      return {
+        id: i,
+        name:       gCell(r, m.name),
+        clasa:      gCell(r, m.clasa),
+        scoala:     gCell(r, m.scoala),
+        localitate: gCell(r, m.localitate),
+        profesor:   gCell(r, m.profesor),
+        premiu:     norm || 'M',
+        _premiuRaw: norm ? null : rawPremiu,
+      };
+    })
     .filter(s => s.name.length > 0);
   renderTable();
+  renderUnknownPremiuWarning();
+}
+
+function renderUnknownPremiuWarning() {
+  const w = document.getElementById('premiu-warn');
+  if (!w) return;
+  const unk = S.students.filter(s => s._premiuRaw !== null);
+  if (!unk.length) { w.style.display = 'none'; w.textContent = ''; return; }
+
+  const distinct = [...new Set(unk.map(s => s._premiuRaw || '(gol)'))];
+  const sample   = distinct.slice(0, 5).map(v => `"${v}"`).join(', ') + (distinct.length > 5 ? '…' : '');
+
+  w.style.display = '';
+  w.textContent = `⚠️ ${unk.length} elevi au valori de premiu necunoscute (${sample}). ` +
+                  `Au fost setați provizoriu pe „Mențiune" — corectează manual în tabel mai jos.`;
 }
 
 // ═══════════════════════════════════
@@ -908,7 +967,7 @@ async function buildPDF(templateBuf, students, common, awardType, fontRegBuf, fo
     let xPt;
     const align = p.align || 'center';
     if (align === 'center') {
-      xPt = (W - tw) / 2;          // true page center regardless of p.x
+      xPt = W * p.x - tw / 2;      // center text around p.x (use 0.5 for true page center)
     } else if (align === 'right') {
       xPt = W * p.x - tw;          // right-edge anchor
     } else {
@@ -927,21 +986,17 @@ async function buildPDF(templateBuf, students, common, awardType, fontRegBuf, fo
 
     const pg = outDoc.getPages()[outDoc.getPageCount()-1];
     const {width:W, height:H} = pg.getSize();
-    const sc = H / 841.89; // scale relative to A4
+    const sc = Math.min(W, H) / 595; // scale on short side; A4-portrait (W=595) and A4-landscape (H=595) both yield sc≈1
 
-    // Draw all fields
-    drawField(pg, W, H, sc, common.concurs,                                    'concurs',          12, true );
-    drawField(pg, W, H, sc, student.name,                                      'name',             14, true );
-    drawField(pg, W, H, sc, student.clasa      ? 'Clasa '+student.clasa : '',  'clasa',            12, false);
-    drawField(pg, W, H, sc, student.scoala,                                    'scoala',           12, false);
-    drawField(pg, W, H, sc, student.localitate,                                'localitate',       12, false);
-    drawField(pg, W, H, sc, student.profesor   ? 'Prof. '+student.profesor: '','profesor',         12, false);
-    drawField(pg, W, H, sc, AWARD_LABELS[awardType]||awardType,                'premiu',           14, true );
-    drawField(pg, W, H, sc, common.an_scolar   ? 'Anul scolar '+common.an_scolar : '', 'an_scolar',10, false);
-    drawField(pg, W, H, sc, common.data_acordarii,                             'data_acordarii',   10, false);
-    drawField(pg, W, H, sc, common.localitate_org,                             'localitate_org',   10, false);
-    drawField(pg, W, H, sc, common.insp_general,                               'insp_general',      9, false);
-    drawField(pg, W, H, sc, common.insp_specialitate,                          'insp_specialitate', 9, false);
+    // Draw fields — only those NOT pre-printed on the TERRA templates
+    // Skipped (already on template): concurs, premiu, an_scolar, data_acordarii, localitate_org
+    drawField(pg, W, H, sc, student.name,             'name',             14, true );
+    drawField(pg, W, H, sc, student.clasa,            'clasa',            12, true );
+    drawField(pg, W, H, sc, student.scoala,           'scoala',           12, false);
+    drawField(pg, W, H, sc, student.localitate,       'localitate',       12, false);
+    drawField(pg, W, H, sc, student.profesor,         'profesor',         12, false);
+    drawField(pg, W, H, sc, common.insp_general,      'insp_general',      9, false);
+    drawField(pg, W, H, sc, common.insp_specialitate, 'insp_specialitate', 9, false);
   }
 
   return await outDoc.save();
