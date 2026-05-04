@@ -320,7 +320,7 @@ footer{text-align:center;padding:18px;color:var(--mu);font-size:.7rem;border-top
   </div>
 </div>
 
-<footer>Generator Diplome Școlare · Toate datele sunt procesate local în browser · niciun fișier nu este trimis pe internet</footer>
+<footer>Generator Diplome Școlare · Toate datele sunt procesate local în browser · niciun fișier nu este trimis pe internet · <span id="app-version"></span></footer>
 
 <!-- Calibration overlay -->
 <div class="cal-overlay" id="cal-overlay" style="display:none">
@@ -353,6 +353,23 @@ footer{text-align:center;padding:18px;color:var(--mu);font-size:.7rem;border-top
 </div>
 
 <script>
+// ═══════════════════════════════════
+// Version (auto: from server Last-Modified — visible in footer for cache/debug)
+// ═══════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  fetch(window.location.href, {method: 'HEAD', cache: 'no-store'})
+    .then(r => r.headers.get('Last-Modified'))
+    .then(lm => {
+      if (!lm) { el.textContent = 'v?'; return; }
+      const d = new Date(lm);
+      const pad = n => String(n).padStart(2, '0');
+      el.textContent = `v${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    })
+    .catch(() => { el.textContent = 'v?'; });
+});
+
 // ═══════════════════════════════════
 // PDF.js worker
 // ═══════════════════════════════════
@@ -410,24 +427,23 @@ const CAL_FIELDS = [
 ];
 
 // Default positions tuned for the TERRA 2026 templates (landscape A4).
-// Active fields drawn over the template's blank lines: name, clasa, scoala, localitate, profesor,
-// insp_general, insp_specialitate. Inactive fields (concurs/premiu/an_scolar/data_acordarii/
-// localitate_org) are pre-printed on the template and skipped in buildPDF below.
-// Coordinates are fractions of the page (0..1) from top-left. Fine-tune via the in-app calibration UI.
+// Coordinates are fractions of the page (0..1) from top-left.
+// These values come from in-app calibration on the actual TERRA template.
+// Fields concurs/premiu/an_scolar/data_acordarii/localitate_org are pre-printed
+// on the TERRA template and are NOT drawn (see drawField calls in buildPDF).
 const DEFAULT_POS = {
-  name:             {x:0.45, y:0.472, align:'left'  },  // after "Se acordă elevei/elevului ___"
-  clasa:            {x:0.93, y:0.472, align:'left'  },  // after "clasa a __-a"
-  scoala:           {x:0.545,y:0.530, align:'center'},  // line "de la unitatea școlară ___"
-  localitate:       {x:0.50, y:0.59,  align:'center'},  // line "localitatea ___, județul ___"
-  profesor:         {x:0.62, y:0.59,  align:'center'},  // line "coordonat de profesor ___" (centered on the blank)
-  insp_general:     {x:0.407,y:0.780, align:'center'},  // signature, left half (above blank line)
-  insp_specialitate:{x:0.810,y:0.780, align:'center'},  // signature, right half (above blank line)
-  // Kept for backward compat with the calibration UI but NOT drawn (see drawField calls below)
-  concurs:          {x:0.5,  y:0.27, align:'center'},
-  premiu:           {x:0.5,  y:0.65, align:'center'},
-  an_scolar:        {x:0.5,  y:0.72, align:'center'},
-  data_acordarii:   {x:0.5,  y:0.76, align:'center'},
-  localitate_org:   {x:0.5,  y:0.80, align:'center'},
+  name:             {x:0.46, y:0.48, align:'center'},  // after "Se acordă elevei/elevului ___"
+  premiu:           {x:0.50, y:0.65, align:'center'},
+  clasa:            {x:0.92, y:0.48, align:'right' },  // after "clasa a __-a"
+  scoala:           {x:0.45, y:0.53, align:'center'},  // line "de la unitatea școlară ___"
+  localitate:       {x:0.41, y:0.60, align:'center'},  // line "localitatea ___, județul ___"
+  profesor:         {x:0.46, y:0.63, align:'center'},  // line "coordonat de profesor ___"
+  concurs:          {x:0.50, y:0.27, align:'center'},
+  an_scolar:        {x:0.78, y:0.38, align:'right' },
+  data_acordarii:   {x:0.83, y:0.36, align:'right' },
+  localitate_org:   {x:0.86, y:0.41, align:'right' },
+  insp_general:     {x:0.35, y:0.78, align:'center'},  // signature, left half
+  insp_specialitate:{x:0.74, y:0.78, align:'right' },  // signature, right half
 };
 
 const PNORM = {
