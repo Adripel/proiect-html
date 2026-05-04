@@ -129,12 +129,14 @@ td input:focus{outline:none;border-color:var(--p2)}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* Calibration overlay */
 .cal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;
-  display:flex;align-items:center;justify-content:center;padding:12px}
-.cal-box{background:#fff;border-radius:16px;padding:22px;width:min(780px,98vw);
-  max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-.cal-preview{position:relative;display:inline-block;cursor:crosshair;
-  border:2px solid var(--bd);border-radius:8px;overflow:hidden;max-width:100%}
-.cal-preview canvas{display:block;max-width:100%}
+  display:flex;align-items:center;justify-content:center;padding:8px}
+.cal-box{background:#fff;border-radius:16px;padding:18px;width:98vw;height:96vh;
+  display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.cal-body{flex:1;min-height:0;display:flex;gap:14px;align-items:stretch;flex-wrap:nowrap}
+.cal-preview{position:relative;flex:1;cursor:crosshair;
+  border:2px solid var(--bd);border-radius:8px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;background:#f7f9ff;min-width:0}
+.cal-preview canvas{display:block;max-width:100%;max-height:100%}
 /* FIX #9: calibration dots with labels */
 .cal-dot{position:absolute;pointer-events:none;transform:translate(-50%,-50%)}
 .cal-dot-circle{width:10px;height:10px;background:#e53;border-radius:50%;
@@ -144,7 +146,7 @@ td input:focus{outline:none;border-color:var(--p2)}
   font-weight:600;max-width:80px;overflow:hidden;text-overflow:ellipsis}
 .cal-dot.active-dot .cal-dot-circle{background:#2355a0;box-shadow:0 0 0 2px #fff,0 0 0 3px #2355a0}
 .cal-dot.active-dot .cal-dot-label{color:#2355a0}
-.cal-fields-list{display:flex;flex-direction:column;gap:5px;max-height:480px;overflow-y:auto}
+.cal-fields-list{display:flex;flex-direction:column;gap:5px;flex:1;overflow-y:auto;min-height:0}
 .cal-field{display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 10px;
   border-radius:7px;border:1.5px solid var(--bd);transition:.15s;background:#f9fafb}
 .cal-field:hover{border-color:var(--p2);background:var(--pl)}
@@ -334,18 +336,19 @@ footer{text-align:center;padding:18px;color:var(--mu);font-size:.7rem;border-top
       <b>2.</b> Click pe imagine în locul unde vrei să apară textul.&nbsp;
       Câmpurile plasate apar cu &bull; verde. Dacă nu calibrezi, se folosesc pozițiile implicite.
     </p>
-    <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-      <div style="flex:1;min-width:200px">
-        <div class="cal-preview" id="cal-preview">
-          <canvas id="cal-canvas"></canvas>
-        </div>
+    <div class="cal-body">
+      <div class="cal-preview" id="cal-preview">
+        <canvas id="cal-canvas"></canvas>
       </div>
-      <div style="flex:0 0 200px;min-width:160px">
+      <div style="flex:0 0 220px;min-width:180px;display:flex;flex-direction:column;min-height:0">
         <div style="font-size:.7rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">Câmpuri diplomă</div>
         <div class="cal-fields-list" id="cal-fields-list"></div>
-        <div style="margin-top:9px;display:flex;gap:6px">
-          <button class="btn bo bsm" style="flex:1" onclick="resetCalibration()">↺ Reset</button>
-          <button class="btn bp bsm" style="flex:1" onclick="saveCalibration()">✓ Gata</button>
+        <div style="margin-top:9px;display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          <button class="btn bo bsm" onclick="copyCalibrationToAll()" title="Aplică pozițiile curente pe toate celelalte template-uri">📋 Copiază pe toate template-urile</button>
+          <div style="display:flex;gap:6px">
+            <button class="btn bo bsm" style="flex:1" onclick="resetCalibration()">↺ Reset</button>
+            <button class="btn bp bsm" style="flex:1" onclick="saveCalibration()">✓ Gata</button>
+          </div>
         </div>
       </div>
     </div>
@@ -427,18 +430,18 @@ const CAL_FIELDS = [
 // Fields concurs/premiu/an_scolar/data_acordarii/localitate_org are pre-printed
 // on the TERRA template and are NOT drawn (see drawField calls in buildPDF).
 const DEFAULT_POS = {
-  name:             {x:0.46, y:0.48, align:'center'},  // after "Se acordă elevei/elevului ___"
-  premiu:           {x:0.50, y:0.65, align:'center'},
-  clasa:            {x:0.92, y:0.48, align:'right' },  // after "clasa a __-a"
+  name:             {x:0.48, y:0.47, align:'center'},  // after "Se acordă elevei/elevului ___"
+  premiu:           {x:0.19, y:0.36, align:'right' },
+  clasa:            {x:0.93, y:0.48, align:'right' },  // after "clasa a __-a"
   scoala:           {x:0.45, y:0.53, align:'center'},  // line "de la unitatea școlară ___"
-  localitate:       {x:0.41, y:0.60, align:'center'},  // line "localitatea ___, județul ___"
-  profesor:         {x:0.46, y:0.63, align:'center'},  // line "coordonat de profesor ___"
-  concurs:          {x:0.50, y:0.27, align:'center'},
-  an_scolar:        {x:0.78, y:0.38, align:'right' },
-  data_acordarii:   {x:0.83, y:0.36, align:'right' },
-  localitate_org:   {x:0.86, y:0.41, align:'right' },
-  insp_general:     {x:0.35, y:0.78, align:'center'},  // signature, left half
-  insp_specialitate:{x:0.74, y:0.78, align:'right' },  // signature, right half
+  localitate:       {x:0.42, y:0.58, align:'center'},  // line "localitatea ___, județul ___"
+  profesor:         {x:0.58, y:0.63, align:'right' },  // line "coordonat de profesor ___"
+  concurs:          {x:0.19, y:0.40, align:'right' },
+  an_scolar:        {x:0.79, y:0.35, align:'right' },
+  data_acordarii:   {x:0.76, y:0.38, align:'right' },
+  localitate_org:   {x:0.77, y:0.41, align:'right' },
+  insp_general:     {x:0.37, y:0.78, align:'center'},  // signature, left half
+  insp_specialitate:{x:0.75, y:0.78, align:'right' },  // signature, right half
 };
 
 const PNORM = {
@@ -849,22 +852,42 @@ async function openCalibration(type) {
   const page=await pdf.getPage(1);
   const vp=page.getViewport({scale:1});
 
-  const maxW=Math.min(500, window.innerWidth*0.52);
-  const scale=maxW/vp.width;
+  // Compute scale from viewport size (full-screen calibration layout).
+  // Reserve ~280px for the right-side sidebar (220px panel + gaps + paddings)
+  // and ~170px vertically for header + instructions + buttons.
+  const availW=Math.max(400, window.innerWidth - 280);
+  const availH=Math.max(300, window.innerHeight - 170);
+  const scale=Math.min(availW/vp.width, availH/vp.height);
   const svp=page.getViewport({scale});
 
   const canvas=document.getElementById('cal-canvas');
   canvas.width=svp.width; canvas.height=svp.height;
+  canvas.dataset.pageW=vp.width;
   await page.render({canvasContext:canvas.getContext('2d'),viewport:svp}).promise;
 
   canvas.onclick=function(e){
     if(!calActiveField) return;
+    // Use display rect (rect.width/height), NOT canvas.width/height (internal resolution).
     const rect=canvas.getBoundingClientRect();
-    const xFrac=(e.clientX-rect.left)/canvas.width;
-    const yFrac=(e.clientY-rect.top)/canvas.height;
-    // FIX #5: preserve the default align for positions near edges, 
-    // but let user override by computing align from x position
-    const align = xFrac < 0.35 ? 'left' : xFrac > 0.65 ? 'right' : 'center';
+    const clickFrac=(e.clientX-rect.left)/rect.width;
+    const yFrac=(e.clientY-rect.top)/rect.height;
+    // Preserve user-chosen alignment if set; otherwise derive from x position.
+    const existing=S.calib[calType][calActiveField];
+    const align = (existing && existing.align) ||
+                  (clickFrac < 0.35 ? 'left' : clickFrac > 0.65 ? 'right' : 'center');
+    // Click point = where the TEXT BEGINS to render (left edge of text).
+    // Convert click position into the anchor `p.x` that pdf-lib uses, depending on align.
+    const f = CAL_FIELDS.find(cf => cf.k === calActiveField);
+    let xFrac = clickFrac;
+    if (f) {
+      const text = calSampleText(calActiveField);
+      const pageW = parseFloat(canvas.dataset.pageW || '842');
+      const fontPx = (f.sz || 12) * (rect.width / pageW);
+      const tw = measureCalText(text, fontPx, f.bold);
+      const twFrac = tw / rect.width;
+      if (align === 'center')      xFrac = clickFrac + twFrac / 2;
+      else if (align === 'right')  xFrac = clickFrac + twFrac;
+    }
     S.calib[calType][calActiveField]={x:xFrac, y:yFrac, align};
     renderCalDots();
     renderCalFieldList();
@@ -874,35 +897,121 @@ async function openCalibration(type) {
   renderCalFieldList();
 }
 
+// Measure text width in display pixels using a 2D canvas (matches the live-preview font).
+function measureCalText(text, sizePx, bold) {
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = (bold ? '700' : '400') + ' ' + sizePx + "px 'DejaVu Sans','Roboto',system-ui,sans-serif";
+  return ctx.measureText(text || '').width;
+}
+
+// Sample text for live preview during calibration. Falls back to placeholder.
+function calSampleText(key) {
+  const s = (S.students && S.students[0]) || {};
+  const dataMap = {
+    name: s.name, clasa: s.clasa, scoala: s.scoala,
+    localitate: s.localitate, profesor: s.profesor
+  };
+  if (key in dataMap) return dataMap[key] || ('[' + key + ']');
+  const inputMap = {
+    insp_general:'ig', insp_specialitate:'is', concurs:'co',
+    an_scolar:'anscolar', data_acordarii:'da', localitate_org:'lo'
+  };
+  if (inputMap[key]) {
+    const inp = document.getElementById(inputMap[key]);
+    return (inp && inp.value) || ('[' + key + ']');
+  }
+  if (key === 'premiu') return AWARD_LABELS[calType] || calType;
+  return '[' + key + ']';
+}
+
 function renderCalDots(){
-  document.querySelectorAll('.cal-dot').forEach(d=>d.remove());
+  document.querySelectorAll('.cal-dot, .cal-textpv').forEach(d=>d.remove());
   const preview=document.getElementById('cal-preview');
   const canvas=document.getElementById('cal-canvas');
   const calib=S.calib[calType]||{};
+  // Display rect + offset of canvas inside preview (preview is flex-centered).
+  const cr=canvas.getBoundingClientRect();
+  const pr=preview.getBoundingClientRect();
+  const cox=cr.left-pr.left, coy=cr.top-pr.top;
+  const cw=cr.width, ch=cr.height;
+  const pageW=parseFloat(canvas.dataset.pageW||'842');
+  const ptToPx=cw/pageW;
+
   CAL_FIELDS.forEach(f=>{
-    const p=calib[f.k]; if(!p) return;
+    const p=calib[f.k]||DEFAULT_POS[f.k];
+    if(!p) return;
+    const isActive=calActiveField===f.k;
+    const placed=!!calib[f.k];
+    const xPx=cox+p.x*cw, yPx=coy+p.y*ch;
+
+    const text=calSampleText(f.k);
+    if(!text) return;
+    const fontPx=(f.sz||12)*ptToPx;
+    const tw=measureCalText(text, fontPx, f.bold);
+
+    // Dot is positioned at the LEFT EDGE of the rendered text (where the data starts to fill).
+    let dotX=xPx;
+    if (p.align==='center')      dotX = xPx - tw/2;
+    else if (p.align==='right')  dotX = xPx - tw;
     const dot=document.createElement('div');
-    dot.className='cal-dot'+(calActiveField===f.k?' active-dot':'');
-    dot.style.left=(p.x*canvas.width)+'px';
-    dot.style.top=(p.y*canvas.height)+'px';
-    // FIX #9: show label next to dot
-    dot.innerHTML=`<div class="cal-dot-circle"></div><div class="cal-dot-label">${f.lbl}</div>`;
+    dot.className='cal-dot'+(isActive?' active-dot':'');
+    dot.style.left=dotX+'px';
+    dot.style.top=yPx+'px';
+    const dotCircle=document.createElement('div');
+    dotCircle.className='cal-dot-circle';
+    dot.appendChild(dotCircle);
     preview.appendChild(dot);
+
+    // Live text preview, sized + aligned like the PDF will render.
+    const transX=p.align==='center'?'-50%':p.align==='right'?'-100%':'0%';
+    const txt=document.createElement('div');
+    txt.className='cal-textpv';
+    txt.style.cssText='position:absolute;pointer-events:none;'+
+      'left:'+xPx+'px;top:'+yPx+'px;'+
+      'transform:translate('+transX+',-50%);'+
+      "font-family:'DejaVu Sans','Roboto',system-ui,sans-serif;"+
+      'font-size:'+fontPx.toFixed(1)+'px;'+
+      'font-weight:'+(f.bold?'700':'400')+';'+
+      'white-space:nowrap;line-height:1;'+
+      'color:'+(isActive?'#2355a0':(placed?'rgba(20,30,50,0.78)':'rgba(120,120,120,0.55)'))+';'+
+      'text-shadow:0 0 3px rgba(255,255,255,0.95),0 0 6px rgba(255,255,255,0.95);';
+    txt.textContent=text;
+    preview.appendChild(txt);
   });
 }
 
 function renderCalFieldList(){
-  const list=document.getElementById('cal-fields-list'); list.innerHTML='';
+  const list=document.getElementById('cal-fields-list');
+  while (list.firstChild) list.removeChild(list.firstChild);
   const calib=S.calib[calType]||{};
+  // For converting stored anchor-x to display "left edge of text" x.
+  const canvas=document.getElementById('cal-canvas');
+  const cw=canvas.getBoundingClientRect().width || 1;
+  const pageW=parseFloat(canvas.dataset.pageW||'842');
+  const ptToPx=cw/pageW;
+
   CAL_FIELDS.forEach(f=>{
     const p=calib[f.k];
     const div=document.createElement('div');
     div.className='cal-field'+(calActiveField===f.k?' active':'')+(p?' placed':'');
-    div.innerHTML=`<div class="cal-field-dot"></div>
-      <div style="flex:1">
-        <div class="cal-fname">${f.lbl}</div>
-        <div class="cal-fpos">${p?`x:${(p.x*100).toFixed(0)}% y:${(p.y*100).toFixed(0)}% [${p.align}]`:'— nu este plasat —'}</div>
-      </div>`;
+    const dotEl=document.createElement('div'); dotEl.className='cal-field-dot';
+    const wrap=document.createElement('div'); wrap.style.flex='1';
+    const nameEl=document.createElement('div'); nameEl.className='cal-fname'; nameEl.textContent=f.lbl;
+    const posEl=document.createElement('div'); posEl.className='cal-fpos';
+    if (p) {
+      // Show LEFT EDGE x-coord (where text starts), matching the dot position.
+      const text = calSampleText(f.k);
+      const tw = measureCalText(text, (f.sz||12)*ptToPx, f.bold);
+      const twFrac = tw / cw;
+      let leftFrac = p.x;
+      if (p.align === 'center')      leftFrac = p.x - twFrac/2;
+      else if (p.align === 'right')  leftFrac = p.x - twFrac;
+      posEl.textContent='x:'+(leftFrac*100).toFixed(0)+'% y:'+(p.y*100).toFixed(0)+'% ['+p.align+']';
+    } else {
+      posEl.textContent='— nu este plasat —';
+    }
+    wrap.appendChild(nameEl); wrap.appendChild(posEl);
+    div.appendChild(dotEl); div.appendChild(wrap);
     div.onclick=()=>{calActiveField=f.k;renderCalFieldList();renderCalDots();};
     list.appendChild(div);
   });
@@ -916,6 +1025,17 @@ function resetCalibration(){
   if(!calType) return;
   initCalib(calType);
   renderCalDots(); renderCalFieldList();
+}
+function copyCalibrationToAll(){
+  if(!calType || !S.calib[calType]) return;
+  const src=S.calib[calType];
+  const others=Object.keys(TYPES).filter(t=>t!==calType);
+  others.forEach(t=>{
+    S.calib[t]={};
+    Object.keys(src).forEach(k=>{ S.calib[t][k]={...src[k]}; });
+  });
+  alert('Calibrarea pentru '+(TYPES[calType]?.label||calType)+
+        ' a fost copiată pe celelalte '+others.length+' template-uri.');
 }
 document.getElementById('cal-overlay').addEventListener('click',function(e){
   if(e.target===this) saveCalibration();
