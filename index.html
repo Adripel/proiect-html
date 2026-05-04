@@ -354,20 +354,15 @@ footer{text-align:center;padding:18px;color:var(--mu);font-size:.7rem;border-top
 
 <script>
 // ═══════════════════════════════════
-// Version (auto: from server Last-Modified — visible in footer for cache/debug)
+// Version (auto: from document.lastModified — reflects file's last server-side change)
 // ═══════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('app-version');
   if (!el) return;
-  fetch(window.location.href, {method: 'HEAD', cache: 'no-store'})
-    .then(r => r.headers.get('Last-Modified'))
-    .then(lm => {
-      if (!lm) { el.textContent = 'v?'; return; }
-      const d = new Date(lm);
-      const pad = n => String(n).padStart(2, '0');
-      el.textContent = `v${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    })
-    .catch(() => { el.textContent = 'v?'; });
+  const d = new Date(document.lastModified);
+  if (isNaN(d.getTime())) { el.textContent = 'v?'; return; }
+  const pad = n => String(n).padStart(2, '0');
+  el.textContent = `v${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 });
 
 // ═══════════════════════════════════
