@@ -415,13 +415,13 @@ const CAL_FIELDS = [
 // localitate_org) are pre-printed on the template and skipped in buildPDF below.
 // Coordinates are fractions of the page (0..1) from top-left. Fine-tune via the in-app calibration UI.
 const DEFAULT_POS = {
-  name:             {x:0.45, y:0.50, align:'left'  },  // after "Se acordă elevei/elevului ___"
-  clasa:            {x:0.86, y:0.50, align:'left'  },  // after "clasa a __-a"
-  scoala:           {x:0.50, y:0.56, align:'center'},  // line "de la unitatea școlară ___"
-  localitate:       {x:0.50, y:0.62, align:'center'},  // line "localitatea ___, județul ___"
-  profesor:         {x:0.62, y:0.62, align:'center'},  // line "coordonat de profesor ___" (centered on the blank, not on the page)
-  insp_general:     {x:0.30, y:0.84, align:'center'},  // signature, left half
-  insp_specialitate:{x:0.78, y:0.84, align:'center'},  // signature, right half
+  name:             {x:0.45, y:0.472, align:'left'  },  // after "Se acordă elevei/elevului ___"
+  clasa:            {x:0.93, y:0.472, align:'left'  },  // after "clasa a __-a"
+  scoala:           {x:0.545,y:0.530, align:'center'},  // line "de la unitatea școlară ___"
+  localitate:       {x:0.50, y:0.59,  align:'center'},  // line "localitatea ___, județul ___"
+  profesor:         {x:0.62, y:0.59,  align:'center'},  // line "coordonat de profesor ___" (centered on the blank)
+  insp_general:     {x:0.407,y:0.780, align:'center'},  // signature, left half (above blank line)
+  insp_specialitate:{x:0.810,y:0.780, align:'center'},  // signature, right half (above blank line)
   // Kept for backward compat with the calibration UI but NOT drawn (see drawField calls below)
   concurs:          {x:0.5,  y:0.27, align:'center'},
   premiu:           {x:0.5,  y:0.65, align:'center'},
@@ -707,16 +707,38 @@ function normPremiu(raw) {
 }
 function gCell(row,idx) { return idx>=0?(row[idx]||'').trim():''; }
 
+// Class markers we expect in the clasa column. Anything else there is a column-leak from
+// a hyphenated name fragment — see the post-process in buildStudents().
+const CLASS_RE = /^(?:V|VI|VII|VIII|IX|X|XI|XII|[5-9]|1[0-2])$/i;
+
 function buildStudents() {
   const m = S.mapping;
   S.students = S.rows
     .map((r,i) => {
+      let nameVal  = gCell(r, m.name);
+      let clasaVal = gCell(r, m.clasa);
+
+      // Repair PDF column drift: hyphenated names (e.g., "ELIZA-MARIA") split across
+      // pdf.js text fragments can leak the post-hyphen part into the clasa column.
+      // If clasa contains more than one token and ends with a real class marker,
+      // prepend the leading tokens to the name.
+      if (clasaVal) {
+        const tokens = clasaVal.split(/\s+/);
+        if (tokens.length > 1 && CLASS_RE.test(tokens[tokens.length - 1])) {
+          const prefix = tokens.slice(0, -1).join(' ');
+          clasaVal = tokens[tokens.length - 1];
+          nameVal  = (nameVal ? nameVal + ' ' : '') + prefix;
+        }
+      }
+      // Normalize spacing around hyphens (artifacts of cell merges).
+      nameVal = nameVal.replace(/\s*-\s*/g, '-').replace(/-+/g, '-').trim();
+
       const rawPremiu = gCell(r, m.premiu);
       const norm      = normPremiu(rawPremiu);
       return {
         id: i,
-        name:       gCell(r, m.name),
-        clasa:      gCell(r, m.clasa),
+        name:       nameVal,
+        clasa:      clasaVal,
         scoala:     gCell(r, m.scoala),
         localitate: gCell(r, m.localitate),
         profesor:   gCell(r, m.profesor),
